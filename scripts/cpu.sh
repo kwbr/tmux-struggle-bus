@@ -19,38 +19,24 @@ usage_threshold_cpu_danger=$(get_tmux_option "@usage_threshold_cpu_danger" "90")
 usage_threshold_cpu_warning=$(get_tmux_option "@usage_threshold_cpu_warning" "80")
 
 main() {
-  local load_average
   local output
-  local physical_cpus
+  local cores
   local real_load_average
 
-  output=" $usage_format_begin_danger CPU? $usage_format_end"
-  physical_cpus=1
+  # Get number of cores
+  cores=$(egrep -e "core id" -e ^physical /proc/cpuinfo|xargs -l2 echo|sort -u | wc -l)
 
-  # Make sure uptime is available.
-  if type uptime >/dev/null 2>&1; then
+  # Calculate 1m load average/core
+  # https://github.com/riemann/riemann-tools/blob/master/bin/riemann-health
+  real_load_average=$(cat /proc/loadavg | awk -v cores=${cores} '{printf "%.0f", $1 * 100 / cores}')
 
-    # Try to find number of physical CPUs.
-    if [ -f /proc/cpuinfo ]; then
-      physical_cpus=$(cat /proc/cpuinfo | grep "physical id" | sort | uniq | wc -l)
-    elif type sysctl >/dev/null 2>&1; then
-      physical_cpus=$(sysctl -n hw.physicalcpu)
-    fi
-
-    # Get 1m load average.
-    load_average=$(uptime | awk '{print $10}')
-
-    # Calculate real load average from 1-100-ish.
-    real_load_average=$(echo "$load_average * 100 / $physical_cpus" | bc)
-
-    # Test against thresholds.
-    if [ "$real_load_average" -ge "$usage_threshold_cpu_danger" ]; then
-      output=" $usage_format_begin_danger$usage_icon_cpu$usage_format_end"
-    elif [ "$real_load_average" -ge "$usage_threshold_cpu_warning" ]; then
-      output=" $usage_format_begin_warning$usage_icon_cpu$usage_format_end"
-    else
-      output=""
-    fi
+  # Test against thresholds.
+  if [ "$real_load_average" -ge "$usage_threshold_cpu_danger" ]; then
+    output=" $usage_format_begin_danger$usage_icon_cpu$usage_format_end"
+  elif [ "$real_load_average" -ge "$usage_threshold_cpu_warning" ]; then
+    output=" $usage_format_begin_warning$usage_icon_cpu$usage_format_end"
+  else
+    output=""
   fi
 
   echo "$output"
