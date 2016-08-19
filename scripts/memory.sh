@@ -15,8 +15,8 @@ usage_format_end=$(get_tmux_option "@usage_format_end" "#[fg=default,bg=default]
 usage_icon_mem=$(get_tmux_option "@usage_icon_mem" " MEM ")
 
 # Thresholds
-usage_threshold_mem_danger=$(get_tmux_option "@usage_threshold_mem_danger" "50")
-usage_threshold_mem_warning=$(get_tmux_option "@usage_threshold_mem_warning" "30")
+usage_threshold_mem_danger=$(get_tmux_option "@usage_threshold_mem_danger" "90")
+usage_threshold_mem_warning=$(get_tmux_option "@usage_threshold_mem_warning" "80")
 
 main() {
   local memory_pressure
@@ -34,6 +34,19 @@ main() {
     page_count=$(echo "$page_data" | grep 'page_free_count' | awk '{print $2}')
     memory_pressure=$(echo "(($page_target - $page_count) * 100) / $page_target" | bc)
   fi
+
+  memory_pressure=$(awk '
+  /MemFree/ { MemFree = $2 }
+  /Buffers/ { Buffers  = $2 }
+  /Cached/  { Cached   = $2 }
+  /MemTotal/ { MemTotal = $2 }
+  END {
+    free = MemFree + Buffers + Cached
+    total = MemTotal
+    fraction = 1 - (free / total)
+    printf "%.0f", fraction * 100
+  }
+  ' /proc/meminfo)
 
   # Test against thresholds.
   if [ -n "$memory_pressure" ]; then
